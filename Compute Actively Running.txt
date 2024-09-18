@@ -1,0 +1,84 @@
+-- this SQL query will pull all compute instances "actively" running over given time frame 
+-- it will return a table with the list of compute instances and their other keys requested in the pull
+
+WITH
+  all_cost AS (
+    SELECT *, '123' as id  from `DataSet_here1.cost` c
+    WHERE
+      _PARTITIONTIME >= TIMESTAMP(DATE("2020-07-01"))
+      AND _PARTITIONTIME < TIMESTAMP(DATE("2020-08-01"))
+    UNION ALL
+    SELECT *, '124' as id  from `DataSet_here2.cost` c
+    WHERE
+      _PARTITIONTIME >= TIMESTAMP(DATE("2020-07-01"))
+      AND _PARTITIONTIME < TIMESTAMP(DATE("2020-08-01"))
+    UNION ALL
+    SELECT *, '125' as id  from `DataSet_here3.cost` c
+    WHERE
+      _PARTITIONTIME >= TIMESTAMP(DATE("2020-07-01"))
+      AND _PARTITIONTIME < TIMESTAMP(DATE("2020-08-01"))
+  ),
+  all_keys AS (
+    SELECT *, '123' as id  from `DataSet_here1.keys`
+    UNION ALL
+    SELECT *, '124' as id  from `DataSet_here2.keys`
+    UNION ALL
+    SELECT *, '125' as id  from `DataSet_here3.keys`
+  ),
+
+  -- the above is the joining/union of multiple datasets and their costs with their key dimensions in a database across the same time stamp
+  -- in this example, this customer had multiple bills/payer accounts 
+  -- thus the union was needed rather than running the same SQL code multiple times
+
+  
+  costs AS (
+    SELECT
+    h.key,
+
+      TIMESTAMP_TRUNC(c.ts, DAY)
+     AS date,
+    SUM(IF(amortized_unblended, c.v, 0)) AS cost,
+    SUM(IF(nonamortized_unblended, IFNULL(c.ua, 0.0), 0.0)) AS usage_amount
+    FROM
+      all_cost AS h,
+      UNNEST(h.cost) AS c
+    WHERE
+      c.ts >= TIMESTAMP(DATE("2020-07-01"))
+      AND c.ts < TIMESTAMP(DATE("2020-08-01"))
+    GROUP BY key, date),
+
+    -- now the code actually pulls the daily (defined by time stamp) costs from the grouped payers/bills
+    
+usage_keys AS (
+    select 
+      distinct key
+    from 
+      all_keys as k
+    where k.service = "AmazonEC2"
+    and k.resource_type = "Compute Instance"
+    and (k.usage_type = "BoxUsage" or k.usage_type = "DiscountedUsage")
+  ),
+
+  -- now the code is pulling the unique key dimensions from the grouped payers/bills
+  -- disctinct is used here otherwise we could have 3 "service" columns
+  -- filtered down on specific keys value pairings
+    
+info as (SELECT SUM(costs.usage_amount) as hours, min(costs.date) as first_seen, max(costs.date) as last_seen, k.payer_id, k.resource_id, k.usage_type, k.instance_type, k.description, SUM(costs.cost) as cost_in_month
+FROM costs 
+INNER JOIN usage_keys kk
+ON kk.key = costs.key
+INNER JOIN all_keys k
+ON costs.key = k.key
+GROUP BY k.payer_id, k.resource_id, k.service, k.usage_type, k.instance_type, k.description
+ORDER BY last_seen DESC, hours DESC)
+
+-- create info table and fill with compiled data from above sections including hours, cost, first/last seen, key dimensions, and monthly costs
+-- define the order and set descending order for last seen, this will ensure the hours closest to 744 will return first (744 hours in month of july) 
+
+SELECT *
+from info 
+where last_seen = "2020-7-31 00:00:00 UTC"
+
+-- we want to ensure that of all the data in the "info" table (created above) we only pull into our export table
+-- what is still running (aka last seen on July 31) - meaning nothing that was shut down in the middle of the month
+-- however, could have been started mid month, goal of query is "actively" running compute instances

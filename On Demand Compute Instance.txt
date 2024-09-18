@@ -1,0 +1,47 @@
+-- This SQL query reads into a select customer dataset in the database and returns usage hours
+-- and cost for all on-demand compute instances (excluded reservations)
+-- running during the specified period. 
+
+
+SELECT sum(cc.usage_amount) AS total_hours,
+-- select usage hours (usage amount) from dataset (referenced below) then display as "total_hours"
+-- select 1 week (see below) expected outcome 168hours or less
+
+min(cc.ts) AS first_seen,
+max(cc.ts) AS last_seen,
+-- select/pull min date (first seen) and max date (last seen) in provided time frame
+
+k.subscription_id,
+k.subscription_name,
+k.resource_id,
+k.region,
+k.instance_type,
+k.operating_system,
+k.service_info_2,
+k.resource_group,
+sum(cc.cost) AS cost_in_period
+-- select specific keys (noted above) from the dataset 
+-- sum costs across first seen/last seen then display as cost_in_period
+
+FROM DataSet_Here1.keys k 
+-- Replace with customer dataset to pick from database, ref as "k" (keys)
+-- keys pull dimensions specifically references above (ie. region, operating system, ect.)
+
+INNER JOIN DataSet_Here1.cost cc ON cc.key = k.key 
+-- join the costs to the original database pull above pulling keys/dimensions
+-- ref as "cc" (customer cost)
+-- using ON clause to join keys and costs dimension columns
+
+WHERE k.service = "Microsoft.Compute"
+AND k.resource_type LIKE 'Virtual Machines-%'
+AND k.resource_type NOT LIKE 'Virtual Machines-R%' 
+-- refine/filter down the data I would like to pull and also avoid pulling from selected keys
+
+AND (DATE(cc.ts) BETWEEN DATE("2020-07-26") AND DATE("2020-08-01"))  
+-- Add date range for time stamp (ts) recommend 1 week (range is inclusive)
+
+GROUP BY k.subscription_id, k.subscription_name, k.resource_id, k.region, k.instance_type, k.operating_system, k.service_info_2, k.resource_group
+-- return key results by column in given order
+
+ORDER BY total_hours DESC, last_seen DESC
+-- define the order, and by descending order 
