@@ -1,6 +1,6 @@
 - 👋 Hi, I am Jamie.
-- 👀 My interests include finding soltions, staying organized, frisbee and baking.
-- 🌱 I’m currently learning ...
+- 👀 My interests include finding solutions, staying organized, frisbee, and baking.
+- 🌱 I’m currently reading Brimstone by Callie Heart.
 - 📫 How to reach me: https://www.linkedin.com/in/jamielee2010/
 - 😄 Pronouns: she/her
 - ⚡ Fun fact: I am left handed.
